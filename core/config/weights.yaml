@@ -1,0 +1,42 @@
+# Scoring Weights Configuration
+# Used in recommendation scoring
+
+scoring_weights:
+  # Family preference matching
+  family_match: 2.0
+  
+  # Grape variety preference matching
+  grape_match: 1.0
+  
+  # Sugar level / sweetness preference
+  sugar_match: 2.5
+  
+  # Price band / budget preference
+  budget_match: 2.0
+  
+  # Aroma profile similarity
+  aroma_similarity: 1.5
+  
+  # Boost for products never purchased (novelty)
+  novelty_bonus: 0.5
+  
+  # Penalty for recently purchased or too frequent
+  recency_penalty: 1.0
+  
+  # Boost for premium tier in UPSELL
+  tier_bonus: 1.5
+  
+  # Global popularity for WINBACK
+  popularity_bonus: 0.8
+
+# Scenario-specific score multipliers
+scenario_multipliers:
+  REBUY: 1.0
+  CROSS_SELL: 1.2
+  UPSELL: 1.1
+  WINBACK: 0.9
+  NURTURE: 1.0
+
+# Aroma confidence decay
+# Lower confidence = less weight on aroma dimension
+aroma_confidence_multiplier: 1.0  # Can be adjusted per aroma level
