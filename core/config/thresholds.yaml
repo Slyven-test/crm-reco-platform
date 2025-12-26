@@ -1,0 +1,43 @@
+# Thresholds Configuration
+# All time-based values in days
+# All financial values in EUR (HT)
+
+# Contact guardrails
+silence_window_days: 135  # Don't contact if last contact < 135 days ago
+recent_purchase_exclusion_days: 60  # Don't recommend products bought < 60 days ago
+
+# Recommendation limits
+max_recos: 3  # Maximum recommendations per customer
+min_recos: 1  # Minimum recommendations per customer (if candidates exist)
+
+# Audit gating
+audit_gate_min_score: 80  # Minimum audit score to export
+audit_error_penalty: 40  # Points lost per error
+audit_warn_penalty: 10  # Points lost per warning
+
+# Scenario thresholds
+scenario:
+  winback_recency_days: 365  # Customer not contacted in > 365 days
+  winback_min_historical_ca: 100  # Historical CA required for WINBACK
+  rebuy_min_recency_days: 150  # Recommend repurchase if last buy > 150 days ago
+  rebuy_max_recency_days: 2000  # Don't REBUY if never bought or too old
+  cross_sell_min_dominant_share: 0.6  # Customer has strong preference (>60%)
+  cross_sell_max_diversity: 0.3  # Low diversity in family purchases
+  upsell_min_stability: 0.6  # Consistent taste profile required
+  upsell_min_tier_lift: 1  # Minimum premium tier increase
+
+# RFM quantile boundaries (configured per dataset, examples below)
+rfm:
+  # Recency: lower is better (days since last purchase)
+  recency_quantiles: [0, 30, 60, 120, 365, 9999]  # Maps to scores 5,4,3,2,1
+  # Frequency: higher is better (number of orders)
+  frequency_quantiles: [0, 2, 5, 10, 20, 999]  # Maps to scores 1,2,3,4,5
+  # Monetary: higher is better (total CA HT)
+  monetary_quantiles: [0, 200, 500, 1000, 2000, 999999]  # Maps to scores 1,2,3,4,5
+
+# Aroma confidence thresholds
+aroma:
+  low_threshold: 0.45
+  medium_threshold: 0.70
+  # High: > 0.70
+  min_orders_for_confidence: 2  # Minimum orders before computing aroma
