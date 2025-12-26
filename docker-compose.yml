@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: crm_reco_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: crm_reco_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crm_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: crm_reco_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crm_network
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: crm_reco_api
+    command: uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/crm_reco_platform
+      - REDIS_URL=redis://redis:6379/0
+      - DEBUG=True
+      - LOG_LEVEL=INFO
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - crm_network
+
+  admin:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: crm_reco_admin
+    command: streamlit run apps/admin_ui/app.py
+    ports:
+      - "8501:8501"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/crm_reco_platform
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    depends_on:
+      - db
+    networks:
+      - crm_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  crm_network:
+    driver: bridge
