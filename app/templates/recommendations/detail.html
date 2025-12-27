@@ -1,0 +1,328 @@
+{#
+  Détails d'une Recommandation
+  
+  Contexte:
+    - reco_id: ID recommandation
+    - recommendation: {customer_name, products_recommended, reasoning, confidence_score, ...}
+    - algorithm_info: {name, description, min_data_required, ...}
+#}
+
+{% extends "base.html" %}
+
+{% block title %}Recommandation {{ reco_id }}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+  <!-- Back Link -->
+  <a href="{{ url_for('recommendations.list_recommendations') }}" class="btn btn-outline-secondary mb-3">
+    <i class="fas fa-arrow-left"></i> Retour aux Recommandations
+  </a>
+
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-md-8">
+      <h1>Recommandation pour {{ recommendation.customer_name }}</h1>
+      <p class="text-muted">
+        Générée le {{ recommendation.generated_at[:10] }} à {{ recommendation.generated_at[11:16] }}
+      </p>
+    </div>
+    <div class="col-md-4 text-right">
+      {% if recommendation.status == 'pending_review' %}
+        <button class="btn btn-success" onclick="submitFeedback('approve')">
+          <i class="fas fa-check"></i> Approuver
+        </button>
+        <button class="btn btn-danger" onclick="submitFeedback('reject')">
+          <i class="fas fa-times"></i> Rejeter
+        </button>
+      {% else %}
+        <button class="btn btn-outline-warning" onclick="regenerate()">
+          <i class="fas fa-sync-alt"></i> Régénérer
+        </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Status Banner -->
+  <div class="row mb-4">
+    <div class="col-md-12">
+      <div class="alert {% if recommendation.status == 'approved' %}alert-success{% elif recommendation.status == 'rejected' %}alert-danger{% else %}alert-warning{% endif %}">
+        <div class="row align-items-center">
+          <div class="col-md-3">
+            <strong>Status:</strong>
+            <span class="badge {% if recommendation.status == 'approved' %}badge-success{% elif recommendation.status == 'rejected' %}badge-danger{% else %}badge-warning{% endif %} badge-lg">
+              {% if recommendation.status == 'approved' %}
+                ✓ Approuvée
+              {% elif recommendation.status == 'rejected' %}
+                ✗ Rejetée
+              {% else %}
+                ⏳ En attente
+              {% endif %}
+            </span>
+          </div>
+          <div class="col-md-3">
+            <strong>Confiance:</strong>
+            <span class="badge badge-{% if recommendation.confidence_score >= 0.8 %}success{% elif recommendation.confidence_score >= 0.6 %}warning{% else %}danger{% endif %} badge-lg">
+              {{ (recommendation.confidence_score * 100)|int }}%
+            </span>
+          </div>
+          <div class="col-md-3">
+            <strong>Qualité Data:</strong>
+            <span class="badge badge-info badge-lg">
+              {{ (recommendation.data_quality_score * 100)|int }}%
+            </span>
+          </div>
+          <div class="col-md-3">
+            <strong>Algorithme:</strong>
+            <span class="badge badge-secondary badge-lg">
+              {{ algorithm_info.name }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Left Column: Details -->
+    <div class="col-md-8">
+      <!-- Customer Info -->
+      <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0"><i class="fas fa-user"></i> Informations Client</h5>
+        </div>
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-sm-3">ID Client:</dt>
+            <dd class="col-sm-9"><code>{{ recommendation.customer_id }}</code></dd>
+            <dt class="col-sm-3">Nom:</dt>
+            <dd class="col-sm-9">{{ recommendation.customer_name }}</dd>
+            <dt class="col-sm-3">Email:</dt>
+            <dd class="col-sm-9">{{ recommendation.customer_email }}</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Products Recommended -->
+      <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+          <h5 class="mb-0"><i class="fas fa-wine-bottle"></i> Produits Recommandés</h5>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Rang</th>
+                <th>Produit</th>
+                <th>Prix</th>
+                <th>Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for product in recommendation.products_recommended %}
+                <tr>
+                  <td><span class="badge badge-primary">{{ loop.index }}</span></td>
+                  <td>
+                    <strong>{{ product.product_name }}</strong><br>
+                    <small class="text-muted">ID: {{ product.product_id }}</small>
+                  </td>
+                  <td>{{ product.price }}€</td>
+                  <td>
+                    <div class="progress" style="width: 100px; height: 20px;">
+                      <div class="progress-bar bg-success" style="width: {{ (product.score * 100)|int }}%">
+                        {{ (product.score * 100)|int }}%
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Reasoning -->
+      <div class="card mb-4">
+        <div class="card-header bg-info text-white">
+          <h5 class="mb-0"><i class="fas fa-lightbulb"></i> Raisonnement</h5>
+        </div>
+        <div class="card-body">
+          <p>{{ recommendation.reasoning }}</p>
+        </div>
+      </div>
+
+      <!-- Feedback -->
+      {% if recommendation.feedback %}
+        <div class="card mb-4">
+          <div class="card-header bg-{% if recommendation.status == 'approved' %}success{% else %}danger{% endif %} text-white">
+            <h5 class="mb-0"><i class="fas fa-comment"></i> Feedback</h5>
+          </div>
+          <div class="card-body">
+            <div class="mb-2">
+              <strong>Note:</strong>
+              {% for i in range(recommendation.feedback.rating) %}
+                <i class="fas fa-star text-warning"></i>
+              {% endfor %}
+              {% for i in range(5 - recommendation.feedback.rating) %}
+                <i class="far fa-star text-muted"></i>
+              {% endfor %}
+            </div>
+            <div class="mb-2">
+              <strong>Commentaire:</strong><br>
+              {{ recommendation.feedback.comment }}
+            </div>
+            <div>
+              <small class="text-muted">
+                Par {{ recommendation.feedback_by }} le {{ recommendation.feedback_at[:10] }}
+              </small>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Right Column: Algorithm & Metrics -->
+    <div class="col-md-4">
+      <!-- Algorithm Info -->
+      <div class="card mb-4">
+        <div class="card-header bg-secondary text-white">
+          <h6 class="mb-0">Algorithme</h6>
+        </div>
+        <div class="card-body">
+          <h5>{{ algorithm_info.name }}</h5>
+          <p class="text-muted">{{ algorithm_info.description }}</p>
+          <dl class="mb-0">
+            <dt>Données requises:</dt>
+            <dd>{{ algorithm_info.min_data_required }}</dd>
+            <dt>Précision typique:</dt>
+            <dd>{{ (algorithm_info.typical_accuracy * 100)|int }}%</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Quality Indicators -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <h6 class="mb-0">Indicateurs Qualité</h6>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <strong>Score de Confiance</strong>
+            <div class="progress" style="height: 25px;">
+              <div class="progress-bar {% if recommendation.confidence_score >= 0.8 %}bg-success{% elif recommendation.confidence_score >= 0.6 %}bg-warning{% else %}bg-danger{% endif %}" 
+                   style="width: {{ (recommendation.confidence_score * 100)|int }}%">
+                {{ (recommendation.confidence_score * 100)|int }}%
+              </div>
+            </div>
+            <small class="text-muted">
+              {% if recommendation.confidence_score >= 0.8 %}
+                ✓ Excellente confiance
+              {% elif recommendation.confidence_score >= 0.6 %}
+                ⚠ Confiance moyenne
+              {% else %}
+                ✗ Faible confiance
+              {% endif %}
+            </small>
+          </div>
+
+          <div>
+            <strong>Qualité des Données</strong>
+            <div class="progress" style="height: 25px;">
+              <div class="progress-bar bg-info" 
+                   style="width: {{ (recommendation.data_quality_score * 100)|int }}%">
+                {{ (recommendation.data_quality_score * 100)|int }}%
+              </div>
+            </div>
+            <small class="text-muted">
+              {% if recommendation.data_quality_score >= 0.8 %}
+                ✓ Données de qualité
+              {% elif recommendation.data_quality_score >= 0.6 %}
+                ⚠ Qualité acceptable
+              {% else %}
+                ✗ Qualité insuffisante
+              {% endif %}
+            </small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">Actions Rapides</h6>
+        </div>
+        <div class="card-body">
+          {% if recommendation.status == 'pending_review' %}
+            <button class="btn btn-success btn-block" onclick="submitFeedback('approve')">
+              <i class="fas fa-check"></i> Approuver
+            </button>
+            <button class="btn btn-danger btn-block" onclick="submitFeedback('reject')">
+              <i class="fas fa-times"></i> Rejeter
+            </button>
+          {% endif %}
+          <button class="btn btn-outline-warning btn-block" onclick="regenerate()">
+            <i class="fas fa-sync-alt"></i> Régénérer
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .badge-lg {
+    font-size: 1rem;
+    padding: 0.5rem 0.8rem;
+  }
+</style>
+
+<script>
+  function submitFeedback(action) {
+    const rating = prompt('Note (1-5):', action === 'approve' ? '4' : '2');
+    if (!rating) return;
+    
+    const comment = prompt('Commentaire (optionnel):', '');
+    
+    fetch('/recommendations/{{ reco_id }}/feedback', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        rating: parseInt(rating),
+        comment: comment || '',
+        action: action
+      })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          alert('✓ Feedback soumis!');
+          location.reload();
+        } else {
+          alert('✗ Erreur: ' + data.message);
+        }
+      })
+      .catch(err => {
+        alert('✗ Erreur: ' + err);
+      });
+  }
+
+  function regenerate() {
+    if (!confirm('Régénérer cette recommandation?')) return;
+    
+    fetch('/recommendations/{{ reco_id }}/regenerate', {
+      method: 'POST'
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          alert('✓ Recommandation régénérée!');
+          location.reload();
+        } else {
+          alert('✗ Erreur: ' + data.message);
+        }
+      })
+      .catch(err => {
+        alert('✗ Erreur: ' + err);
+      });
+  }
+</script>
+{% endblock %}

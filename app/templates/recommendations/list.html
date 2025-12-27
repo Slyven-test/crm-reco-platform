@@ -1,0 +1,364 @@
+{#
+  Liste des Recommandations
+  
+  Contexte:
+    - recommendations: [{reco_id, customer_name, products_recommended, confidence_score, status, ...}]
+    - metrics: {total_recommendations, avg_confidence, approval_rate, ...}
+    - algorithms: {key: {name, description, ...}}
+#}
+
+{% extends "base.html" %}
+
+{% block title %}Recommandations Clients{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-md-8">
+      <h1>🎯 Recommandations Clients</h1>
+      <p class="text-muted">Auditez et validez les recommandations générées</p>
+    </div>
+    <div class="col-md-4 text-right">
+      <button class="btn btn-outline-primary" onclick="showAuditReport()">
+        <i class="fas fa-chart-line"></i> Rapport d'Audit
+      </button>
+    </div>
+  </div>
+
+  <!-- Metrics Cards -->
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Total</h5>
+          <h2 class="text-primary">{{ metrics.total_recommendations }}</h2>
+          <small class="text-muted">Recommandations</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Confiance Avg</h5>
+          <h2 class="text-info">{{ metrics.avg_confidence }}%</h2>
+          <small class="text-muted">Score moyen</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Approuvées</h5>
+          <h2 class="text-success">{{ metrics.approval_rate }}%</h2>
+          <small class="text-muted">{{ metrics.approved_count }} total</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">En Attente</h5>
+          <h2 class="text-warning">{{ metrics.pending_count }}</h2>
+          <small class="text-muted">À reviewer</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="row mb-3">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-body">
+          <form method="GET" class="form-inline">
+            <label class="mr-2">Filtrer:</label>
+            <select name="status" class="form-control form-control-sm mr-2" onchange="this.form.submit()">
+              <option value="">-- Tous status --</option>
+              <option value="pending_review" {% if status_filter == 'pending_review' %}selected{% endif %}>En attente</option>
+              <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approuvées</option>
+              <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejetées</option>
+            </select>
+            <select name="algorithm" class="form-control form-control-sm mr-2" onchange="this.form.submit()">
+              <option value="">-- Tous algorithmes --</option>
+              {% for algo_key, algo_info in algorithms.items() %}
+                <option value="{{ algo_key }}" {% if algorithm_filter == algo_key %}selected{% endif %}>{{ algo_info.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Appliquer</button>
+            <a href="{{ url_for('recommendations.list_recommendations') }}" class="btn btn-sm btn-outline-secondary ml-2">Reset</a>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recommendations List -->
+  <div class="row">
+    {% if recommendations %}
+      {% for reco in recommendations %}
+        <div class="col-lg-6 mb-4">
+          <div class="card h-100 shadow-sm">
+            <!-- Header -->
+            <div class="card-header {% if reco.status == 'approved' %}bg-success{% elif reco.status == 'rejected' %}bg-danger{% else %}bg-warning{% endif %} text-white">
+              <div class="d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">{{ reco.customer_name }}</h6>
+                <span class="badge badge-light">
+                  {% if reco.status == 'approved' %}
+                    ✓ Approuvée
+                  {% elif reco.status == 'rejected' %}
+                    ✗ Rejetée
+                  {% else %}
+                    ⏳ En attente
+                  {% endif %}
+                </span>
+              </div>
+            </div>
+
+            <!-- Body -->
+            <div class="card-body">
+              <!-- Customer Info -->
+              <div class="mb-3">
+                <strong>Client:</strong><br>
+                <small class="text-muted">{{ reco.customer_email }}</small>
+              </div>
+
+              <!-- Products Recommended -->
+              <div class="mb-3">
+                <strong>Produits Recommandés:</strong>
+                <ul class="list-unstyled mt-2">
+                  {% for product in reco.products_recommended[:3] %}
+                    <li>
+                      <span class="badge badge-secondary">{{ product.score|round(2) }}</span>
+                      {{ product.product_name }}
+                      <small class="text-muted">({{ product.price }}€)</small>
+                    </li>
+                  {% endfor %}
+                  {% if reco.products_recommended|length > 3 %}
+                    <li><small class="text-muted">... et {{ reco.products_recommended|length - 3 }} autre(s)</small></li>
+                  {% endif %}
+                </ul>
+              </div>
+
+              <!-- Scores -->
+              <div class="row mb-3">
+                <div class="col-6">
+                  <strong>Confiance:</strong><br>
+                  <div class="progress" style="height: 20px;">
+                    <div class="progress-bar {% if reco.confidence_score >= 0.8 %}bg-success{% elif reco.confidence_score >= 0.6 %}bg-warning{% else %}bg-danger{% endif %}" 
+                         style="width: {{ (reco.confidence_score * 100)|int }}%">
+                      {{ (reco.confidence_score * 100)|int }}%
+                    </div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <strong>Qualité Data:</strong><br>
+                  <div class="progress" style="height: 20px;">
+                    <div class="progress-bar bg-info" 
+                         style="width: {{ (reco.data_quality_score * 100)|int }}%">
+                      {{ (reco.data_quality_score * 100)|int }}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Algorithm -->
+              <div class="mb-3">
+                <strong>Algorithme:</strong>
+                <span class="badge badge-info">{{ algorithms.get(reco.algorithm, {}).get('name', reco.algorithm) }}</span>
+              </div>
+
+              <!-- Reasoning Preview -->
+              <div class="mb-3">
+                <strong>Raisonnement:</strong><br>
+                <small class="text-muted">{{ reco.reasoning[:100] }}{% if reco.reasoning|length > 100 %}...{% endif %}</small>
+              </div>
+
+              <!-- Feedback -->
+              {% if reco.feedback %}
+                <div class="alert alert-{% if reco.status == 'approved' %}success{% else %}danger{% endif %} alert-sm">
+                  <strong>Feedback:</strong> 
+                  <span class="badge badge-warning">★ {{ reco.feedback.rating }}/5</span><br>
+                  <small>{{ reco.feedback.comment }}</small>
+                </div>
+              {% endif %}
+            </div>
+
+            <!-- Footer -->
+            <div class="card-footer bg-light">
+              <div class="btn-group btn-group-sm w-100" role="group">
+                <a href="{{ url_for('recommendations.view_recommendation', reco_id=reco.reco_id) }}" 
+                   class="btn btn-outline-primary">
+                  <i class="fas fa-eye"></i> Détails
+                </a>
+                {% if reco.status == 'pending_review' %}
+                  <button class="btn btn-outline-success" onclick="openFeedbackModal('{{ reco.reco_id }}', 'approve')">
+                    <i class="fas fa-check"></i> Approuver
+                  </button>
+                  <button class="btn btn-outline-danger" onclick="openFeedbackModal('{{ reco.reco_id }}', 'reject')">
+                    <i class="fas fa-times"></i> Rejeter
+                  </button>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="col-12">
+        <div class="alert alert-info">
+          Aucune recommandation trouvée avec ces critères.
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal: Feedback -->
+<div class="modal fade" id="feedbackModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Soumettre Feedback</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="feedback_reco_id">
+        <input type="hidden" id="feedback_action">
+        
+        <div class="form-group">
+          <label>Note (1-5)</label>
+          <select class="form-control" id="feedback_rating">
+            <option value="1">1 - Très mauvais</option>
+            <option value="2">2 - Mauvais</option>
+            <option value="3" selected>3 - Moyen</option>
+            <option value="4">4 - Bon</option>
+            <option value="5">5 - Excellent</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Commentaire</label>
+          <textarea class="form-control" id="feedback_comment" rows="3" placeholder="Facultatif"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" onclick="submitFeedback()">Soumettre</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Audit Report -->
+<div class="modal fade" id="auditModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Rapport d'Audit</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="auditReportBody">
+        <!-- Dynamiquement rempli -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .alert-sm {
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+  }
+</style>
+
+<script>
+  function openFeedbackModal(recoId, action) {
+    document.getElementById('feedback_reco_id').value = recoId;
+    document.getElementById('feedback_action').value = action;
+    document.getElementById('feedback_rating').value = action === 'approve' ? '4' : '2';
+    document.getElementById('feedback_comment').value = '';
+    $('#feedbackModal').modal('show');
+  }
+
+  function submitFeedback() {
+    const recoId = document.getElementById('feedback_reco_id').value;
+    const action = document.getElementById('feedback_action').value;
+    const rating = document.getElementById('feedback_rating').value;
+    const comment = document.getElementById('feedback_comment').value;
+
+    fetch(`/recommendations/${recoId}/feedback`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({rating: parseInt(rating), comment, action})
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          alert('✓ Feedback soumis avec succès!');
+          location.reload();
+        } else {
+          alert('✗ Erreur: ' + data.message);
+        }
+      })
+      .catch(err => {
+        alert('✗ Erreur: ' + err);
+      });
+  }
+
+  function showAuditReport() {
+    fetch('/recommendations/api/audit')
+      .then(r => r.json())
+      .then(data => {
+        let html = '<div class="alert alert-info"><strong>📊 Rapport généré:</strong> ' + data.timestamp + '</div>';
+        
+        // Global Metrics
+        html += '<h6>Métriques Globales:</h6>';
+        html += '<dl class="row">';
+        html += '<dt class="col-sm-6">Total:</dt><dd class="col-sm-6">' + data.global_metrics.total_recommendations + '</dd>';
+        html += '<dt class="col-sm-6">Confiance Avg:</dt><dd class="col-sm-6">' + data.global_metrics.avg_confidence + '%</dd>';
+        html += '<dt class="col-sm-6">Taux Approbation:</dt><dd class="col-sm-6">' + data.global_metrics.approval_rate + '%</dd>';
+        html += '</dl>';
+        
+        // By Algorithm
+        html += '<h6>Par Algorithme:</h6>';
+        for (const [algo, stats] of Object.entries(data.by_algorithm)) {
+          html += '<div class="card mb-2"><div class="card-body">';
+          html += '<strong>' + algo + '</strong> <span class="badge badge-secondary">' + stats.count + ' recos</span><br>';
+          html += 'Confiance: ' + stats.avg_confidence + '% | Taux approbation: ' + stats.approval_rate + '%';
+          html += '</div></div>';
+        }
+        
+        // Issues
+        if (data.issues_count > 0) {
+          html += '<h6>⚠️ Issues Détectées (' + data.issues_count + '):</h6>';
+          html += '<table class="table table-sm"><thead><tr><th>Reco</th><th>Issue</th><th>Severity</th></tr></thead><tbody>';
+          for (const issue of data.issues) {
+            const color = issue.severity === 'high' ? 'danger' : issue.severity === 'medium' ? 'warning' : 'info';
+            html += '<tr><td>' + issue.reco_id + '</td><td>' + issue.issue + '</td>';
+            html += '<td><span class="badge badge-' + color + '">' + issue.severity + '</span></td></tr>';
+          }
+          html += '</tbody></table>';
+        }
+        
+        document.getElementById('auditReportBody').innerHTML = html;
+        $('#auditModal').modal('show');
+      })
+      .catch(err => {
+        document.getElementById('auditReportBody').innerHTML = '<div class="alert alert-danger">Erreur: ' + err + '</div>';
+        $('#auditModal').modal('show');
+      });
+  }
+</script>
+{% endblock %}
