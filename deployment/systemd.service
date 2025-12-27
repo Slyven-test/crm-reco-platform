@@ -1,0 +1,35 @@
+# Systemd Service for CRM Recommendation Platform
+# Place in: /etc/systemd/system/crm-reco-platform.service
+
+[Unit]
+Description=CRM Recommendation Platform - Gunicorn
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/crm-reco-platform
+Environment="PATH=/opt/crm-reco-platform/venv/bin"
+Environment="FLASK_ENV=production"
+ExecStart=/opt/crm-reco-platform/venv/bin/gunicorn \
+    --config /opt/crm-reco-platform/deployment/gunicorn.conf.py \
+    app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+PrivateTmp=true
+Restart=always
+RestartSec=5
+
+# Security
+NoNewPrivileges=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/crm-reco-platform/logs
+ReadWritePaths=/var/log/gunicorn
+
+[Install]
+WantedBy=multi-user.target
