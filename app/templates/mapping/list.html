@@ -1,0 +1,333 @@
+{#
+  Liste des Mappings
+  
+  Contexte:
+    - mappings: [{name, connector_name, connector_type, quality_score, status, field_count, ...}]
+    - stats: {total_mappings, avg_quality_score, active_mappings}
+#}
+
+{% extends "base.html" %}
+
+{% block title %}Mappings de Champs{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-md-8">
+      <h1>🗃️ Mappings de Champs</h1>
+      <p class="text-muted">Configurez le mapping entre vos sources et le schéma canonique</p>
+    </div>
+    <div class="col-md-4 text-right">
+      <a href="{{ url_for('mapping.new_mapping') }}" class="btn btn-primary btn-lg">
+        <i class="fas fa-plus"></i> Créer Mapping
+      </a>
+    </div>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="row mb-4">
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Mappings</h5>
+          <h2 class="text-primary">{{ stats.total_mappings }}</h2>
+          <small class="text-muted">Total</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Qualité Moyenne</h5>
+          <h2 class="text-success">{{ stats.avg_quality_score }}%</h2>
+          <small class="text-muted">Score</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Actifs</h5>
+          <h2 class="text-info">{{ stats.active_mappings }}</h2>
+          <small class="text-muted">En production</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mappings List -->
+  <div class="row">
+    {% if mappings %}
+      {% for mapping in mappings %}
+        <div class="col-lg-6 mb-4">
+          <div class="card h-100 shadow-sm">
+            <!-- Header -->
+            <div class="card-header bg-light">
+              <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ mapping.name }}</h5>
+                <span class="badge {% if mapping.status == 'active' %}badge-success{% elif mapping.status == 'draft' %}badge-warning{% else %}badge-danger{% endif %}">
+                  {{ mapping.status|upper }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Body -->
+            <div class="card-body">
+              <!-- Connecteur -->
+              <div class="mb-3">
+                <strong>Connecteur:</strong><br>
+                <small class="text-muted">{{ mapping.connector_name }} ({{ mapping.connector_type|upper }})</small>
+              </div>
+
+              <!-- Quality Score -->
+              <div class="mb-3">
+                <strong>Qualité de Mapping:</strong><br>
+                <div class="progress" style="height: 25px;">
+                  <div 
+                    class="progress-bar {% if mapping.quality_score >= 80 %}bg-success{% elif mapping.quality_score >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                    role="progressbar" 
+                    style="width: {{ mapping.quality_score }}%"
+                    aria-valuenow="{{ mapping.quality_score }}" 
+                    aria-valuemin="0" 
+                    aria-valuemax="100"
+                  >
+                    {{ mapping.quality_score }}%
+                  </div>
+                </div>
+                <small class="text-muted">{{ mapping.field_count }} champs mappés</small>
+              </div>
+
+              <!-- Dates -->
+              <div class="mb-3">
+                <strong>Créé le:</strong><br>
+                <small class="text-muted">{{ mapping.created_at[:10] if mapping.created_at else 'N/A' }}</small>
+              </div>
+
+              <div class="mb-0">
+                <strong>Modifié le:</strong><br>
+                <small class="text-muted">{{ mapping.last_modified[:10] if mapping.last_modified else 'N/A' }}</small>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="card-footer bg-light">
+              <div class="btn-group btn-group-sm w-100" role="group">
+                <!-- Edit Button -->
+                <a 
+                  href="{{ url_for('mapping.view_mapping', name=mapping.name) }}" 
+                  class="btn btn-outline-primary"
+                  title="Éditer mapping"
+                >
+                  <i class="fas fa-edit"></i> Éditer
+                </a>
+
+                <!-- Preview Button -->
+                <button 
+                  type="button" 
+                  class="btn btn-outline-info preview-mapping-btn" 
+                  data-mapping="{{ mapping.name }}"
+                  title="Aperçu normalisation"
+                >
+                  <i class="fas fa-eye"></i> Aperçu
+                </button>
+
+                <!-- Quality Report Button -->
+                <button 
+                  type="button" 
+                  class="btn btn-outline-success quality-report-btn" 
+                  data-mapping="{{ mapping.name }}"
+                  title="Rapport qualité"
+                >
+                  <i class="fas fa-chart-bar"></i> Qualité
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="col-12">
+        <div class="alert alert-info" role="alert">
+          <h5>🔍 Aucun mapping configuré</h5>
+          <p>Créez un premier mapping pour commencer.</p>
+          <a href="{{ url_for('mapping.new_mapping') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Créer Mapping
+          </a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal: Quality Report -->
+<div class="modal fade" id="qualityReportModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Rapport Qualité</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="qualityReportBody">
+        <!-- Dynamiquement rempli -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Preview -->
+<div class="modal fade" id="previewModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Aperçu Normalisation</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="previewBody">
+        <!-- Dynamiquement rempli -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .btn-group-sm .btn {
+    font-size: 0.85rem;
+    padding: 0.35rem 0.6rem;
+  }
+
+  .progress {
+    background-color: #f0f0f0;
+  }
+
+  .badge-lg {
+    font-size: 1.1rem;
+    padding: 0.5rem 0.8rem;
+  }
+</style>
+
+<script>
+  // Quality Report
+  document.querySelectorAll('.quality-report-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const mappingName = this.dataset.mapping;
+      
+      fetch(`/mapping/api/quality-report?mapping=${mappingName}`)
+        .then(r => r.json())
+        .then(data => {
+          const mapping = data.mappings[0];
+          
+          let fieldStatsHtml = '';
+          for (const [table, stats] of Object.entries(mapping.field_stats)) {
+            fieldStatsHtml += `
+              <div class="card mb-3">
+                <div class="card-header bg-light">
+                  <strong>${table}</strong>
+                  <span class="float-right">
+                    <span class="badge badge-primary">${stats.mapped}/${stats.total_fields}</span>
+                  </span>
+                </div>
+                <div class="card-body">
+                  <div class="row">
+                    <div class="col-md-6">
+                      <strong>Coverage:</strong> ${stats.coverage}%
+                      <div class="progress">
+                        <div class="progress-bar bg-success" style="width: ${stats.coverage}%"></div>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <dl class="row mb-0">
+                        <dt class="col-sm-6">Unmapped:</dt>
+                        <dd class="col-sm-6">${stats.unmapped}</dd>
+                        <dt class="col-sm-6">Required missing:</dt>
+                        <dd class="col-sm-6">${stats.required_missing}</dd>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+          
+          const report = `
+            <div class="alert alert-${mapping.quality_score >= 80 ? 'success' : mapping.quality_score >= 50 ? 'warning' : 'danger'}">
+              <h5>Score Global: ${mapping.quality_score}/100</h5>
+            </div>
+            <div class="mt-3">
+              <h6>Statistiques par Table:</h6>
+              ${fieldStatsHtml}
+            </div>
+          `;
+          
+          document.getElementById('qualityReportBody').innerHTML = report;
+          $('#qualityReportModal').modal('show');
+        })
+        .catch(err => {
+          document.getElementById('qualityReportBody').innerHTML = `<div class="alert alert-danger">Erreur: ${err}</div>`;
+          $('#qualityReportModal').modal('show');
+        });
+    });
+  });
+
+  // Preview Mapping
+  document.querySelectorAll('.preview-mapping-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const mappingName = this.dataset.mapping;
+      
+      // Mock sample data
+      const sampleData = {
+        'CUSTOMERS': [
+          {'client_id': 'C001', 'client_name': 'John Doe', 'client_email': 'john@example.com'},
+          {'client_id': 'C002', 'client_name': 'Jane Smith', 'client_email': 'jane@example.com'},
+        ]
+      };
+      
+      fetch(`/mapping/${mappingName}/preview`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({sample_data: sampleData})
+      })
+        .then(r => r.json())
+        .then(data => {
+          let anomaliesHtml = '';
+          if (data.anomalies_count > 0) {
+            anomaliesHtml = `
+              <div class="alert alert-warning">
+                <strong>⚠️ Détectées ${data.anomalies_count} anomalies</strong>
+                <div class="mt-2">
+                  <span class="badge badge-danger">Critical: ${data.critical_count}</span>
+                  <span class="badge badge-warning">High: ${data.high_count}</span>
+                </div>
+              </div>
+            `;
+          }
+          
+          const preview = `
+            ${anomaliesHtml}
+            <h6>Données normalisées:</h6>
+            <pre><code>${JSON.stringify(data.normalized_sample, null, 2)}</code></pre>
+          `;
+          
+          document.getElementById('previewBody').innerHTML = preview;
+          $('#previewModal').modal('show');
+        })
+        .catch(err => {
+          document.getElementById('previewBody').innerHTML = `<div class="alert alert-danger">Erreur: ${err}</div>`;
+          $('#previewModal').modal('show');
+        });
+    });
+  });
+</script>
+{% endblock %}
