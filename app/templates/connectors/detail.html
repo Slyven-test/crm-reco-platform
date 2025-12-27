@@ -1,0 +1,302 @@
+{#
+  Détails d'un connecteur
+  
+  Contexte:
+    - connector_name: Nom du connecteur
+    - status: {type, status, last_sync, last_error}
+    - sync_logs: [{timestamp, success, records_processed, errors, ...}]
+#}
+
+{% extends "base.html" %}
+
+{% block title %}{{ connector_name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+  <!-- Back Link -->
+  <a href="{{ url_for('connectors.list_connectors') }}" class="btn btn-outline-secondary mb-3">
+    <i class="fas fa-arrow-left"></i> Retour aux sources
+  </a>
+
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-md-8">
+      <h1>{{ connector_name }}</h1>
+      <p class="text-muted">
+        Type: <span class="badge badge-info">{{ status.connector_type|upper }}</span>
+      </p>
+    </div>
+    <div class="col-md-4 text-right">
+      <button 
+        class="btn btn-outline-info mr-2" 
+        onclick="testConnector('{{ connector_name }}')"
+      >
+        <i class="fas fa-check-circle"></i> Test
+      </button>
+      <button 
+        class="btn btn-primary" 
+        onclick="syncConnector('{{ connector_name }}')"
+      >
+        <i class="fas fa-sync-alt"></i> Synchroniser
+      </button>
+    </div>
+  </div>
+
+  <!-- Status Card -->
+  <div class="card mb-4">
+    <div class="card-header {% if status.status == 'healthy' %}bg-success{% else %}bg-danger{% endif %} text-white">
+      <h5 class="mb-0">📄 Status</h5>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-4">
+          <strong>Status actuel:</strong><br>
+          <span class="badge {% if status.status == 'healthy' %}badge-success{% elif status.status == 'error' %}badge-danger{% else %}badge-warning{% endif %} badge-lg">
+            {% if status.status == 'healthy' %}
+              ✓ Sain
+            {% elif status.status == 'error' %}
+              ✗ Erreur
+            {% elif status.status == 'syncing' %}
+              🔄 Syncing...
+            {% else %}
+              ⏸ Inactif
+            {% endif %}
+          </span>
+        </div>
+
+        <div class="col-md-4">
+          <strong>Dernière sync:</strong><br>
+          {% if status.last_sync %}
+            <small class="text-muted">{{ status.last_sync }}</small>
+          {% else %}
+            <span class="text-muted">Jamais</span>
+          {% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <strong>Type:</strong><br>
+          <code>{{ status.connector_type }}</code>
+        </div>
+      </div>
+
+      {% if status.last_error %}
+        <div class="alert alert-danger mt-3 mb-0">
+          <strong>⚠️ Dernière erreur:</strong><br>
+          {{ status.last_error }}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Sync Logs -->
+  <div class="card">
+    <div class="card-header bg-light">
+      <h5 class="mb-0">📈 Historique des Syncs</h5>
+    </div>
+    <div class="card-body p-0">
+      {% if sync_logs %}
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Records</th>
+                <th>Durée (s)</th>
+                <th>Erreurs</th>
+                <th>Avertissements</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for log in sync_logs %}
+                <tr class="{% if log.success %}table-success{% else %}table-danger{% endif %}">
+                  <td><small>{{ log.timestamp }}</small></td>
+                  <td>
+                    {% if log.success %}
+                      <span class="badge badge-success">✓ OK</span>
+                    {% else %}
+                      <span class="badge badge-danger">✗ ERREUR</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if log.records_processed %}
+                      <button 
+                        class="btn btn-sm btn-outline-info" 
+                        data-toggle="collapse" 
+                        data-target="#records-{{ loop.index }}"
+                      >
+                        {{ log.records_processed.values()|list|sum }}
+                      </button>
+                      <div class="collapse mt-2" id="records-{{ loop.index }}">
+                        <div class="card card-body bg-light">
+                          <dl class="row mb-0">
+                            {% for table, count in log.records_processed.items() %}
+                              <dt class="col-sm-6">{{ table }}</dt>
+                              <dd class="col-sm-6">{{ count }}</dd>
+                            {% endfor %}
+                          </dl>
+                        </div>
+                      </div>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td>{{ log.duration_seconds|round(2) }}</td>
+                  <td>
+                    {% if log.errors %}
+                      <button 
+                        class="btn btn-sm btn-danger" 
+                        data-toggle="collapse" 
+                        data-target="#errors-{{ loop.index }}"
+                      >
+                        {{ log.errors|length }}
+                      </button>
+                      <div class="collapse mt-2" id="errors-{{ loop.index }}">
+                        <div class="card card-body bg-danger text-white">
+                          <ul class="mb-0">
+                            {% for error in log.errors %}
+                              <li>{{ error }}</li>
+                            {% endfor %}
+                          </ul>
+                        </div>
+                      </div>
+                    {% else %}
+                      <span class="text-muted">-</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if log.warnings %}
+                      <button 
+                        class="btn btn-sm btn-warning" 
+                        data-toggle="collapse" 
+                        data-target="#warnings-{{ loop.index }}"
+                      >
+                        {{ log.warnings|length }}
+                      </button>
+                      <div class="collapse mt-2" id="warnings-{{ loop.index }}">
+                        <div class="card card-body bg-warning">
+                          <ul class="mb-0">
+                            {% for warning in log.warnings %}
+                              <li>{{ warning }}</li>
+                            {% endfor %}
+                          </ul>
+                        </div>
+                      </div>
+                    {% else %}
+                      <span class="text-muted">-</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="alert alert-info mb-0">
+          Aucune synchronisation effectuée pour le moment.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Test Result -->
+<div class="modal fade" id="testResultModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Résultat Test</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="testResultBody">
+        <!-- Dynamiquement rempli -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Sync Result -->
+<div class="modal fade" id="syncResultModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Résultat Sync</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="syncResultBody">
+        <!-- Dynamiquement rempli -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function testConnector(connectorName) {
+    fetch(`/connectors/${connectorName}/test`, { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        const result = `
+          <div class="alert alert-${data.success ? 'success' : 'danger'}">
+            <strong>${data.success ? '✓ Succès' : '✗ Échec'}</strong><br>
+            ${data.message}
+          </div>
+          <p><strong>Status:</strong> <span class="badge">${data.status}</span></p>
+        `;
+        document.getElementById('testResultBody').innerHTML = result;
+        $('#testResultModal').modal('show');
+      })
+      .catch(err => {
+        document.getElementById('testResultBody').innerHTML = `<div class="alert alert-danger">Erreur: ${err}</div>`;
+        $('#testResultModal').modal('show');
+      });
+  }
+
+  function syncConnector(connectorName) {
+    if (confirm('🔄 Lancer la synchronisation?')) {
+      fetch(`/connectors/${connectorName}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+        .then(r => r.json())
+        .then(data => {
+          const recordsHtml = Object.entries(data.records_processed || {})
+            .map(([k, v]) => `<li><strong>${k}:</strong> ${v} records</li>`)
+            .join('');
+          
+          const errorsHtml = data.errors && data.errors.length
+            ? `<hr><h6>Erreurs:</h6><ul>${data.errors.map(e => `<li>${e}</li>`).join('')}</ul>`
+            : '';
+          
+          const result = `
+            <div class="alert alert-${data.success ? 'success' : 'danger'}">
+              <strong>${data.success ? '✓ Succès' : '✗ Échec'}</strong>
+            </div>
+            <p><strong>Records traités:</strong></p>
+            <ul>${recordsHtml || '<li>Aucun</li>'}</ul>
+            <p><strong>Durée:</strong> ${data.duration_seconds}s</p>
+            ${errorsHtml}
+          `;
+          document.getElementById('syncResultBody').innerHTML = result;
+          $('#syncResultModal').modal('show');
+          
+          // Refresh after 3s
+          setTimeout(() => location.reload(), 3000);
+        })
+        .catch(err => {
+          document.getElementById('syncResultBody').innerHTML = `<div class="alert alert-danger">Erreur: ${err}</div>`;
+          $('#syncResultModal').modal('show');
+        });
+    }
+  }
+</script>
+{% endblock %}
