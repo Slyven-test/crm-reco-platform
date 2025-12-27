@@ -1,0 +1,405 @@
+{#
+  Détails d'un mapping
+  
+  Contexte:
+    - mapping_name: Nom du mapping
+    - mapping: {connector_name, connector_type, quality_score, status, field_mappings, ...}
+    - field_mappings: [{table, canonical_field, source_field, transform, required, type}]
+    - unmapped_fields: [{table, field}]
+    - quality_rules: {table: {field: {required, type}}}
+#}
+
+{% extends "base.html" %}
+
+{% block title %}{{ mapping_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-5">
+  <!-- Back Link -->
+  <a href="{{ url_for('mapping.list_mappings') }}" class="btn btn-outline-secondary mb-3">
+    <i class="fas fa-arrow-left"></i> Retour aux Mappings
+  </a>
+
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-md-8">
+      <h1>{{ mapping_name }}</h1>
+      <p class="text-muted">
+        Connecteur: <strong>{{ mapping.connector_name }}</strong> ({{ mapping.connector_type|upper }})
+      </p>
+    </div>
+    <div class="col-md-4 text-right">
+      <button class="btn btn-outline-info mr-2" onclick="previewMapping()">
+        <i class="fas fa-eye"></i> Aperçu
+      </button>
+      <button class="btn btn-outline-success mr-2" onclick="generateQualityReport()">
+        <i class="fas fa-chart-bar"></i> Rapport
+      </button>
+      <button class="btn btn-outline-warning" onclick="detectAnomalies()">
+        <i class="fas fa-exclamation-triangle"></i> Anomalies
+      </button>
+    </div>
+  </div>
+
+  <!-- Quality Score -->
+  <div class="row mb-4">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-body">
+          <div class="row align-items-center">
+            <div class="col-md-3">
+              <h5>Score de Qualité</h5>
+              <div class="text-center">
+                <h2 class="{% if mapping.quality_score >= 80 %}text-success{% elif mapping.quality_score >= 50 %}text-warning{% else %}text-danger{% endif %}">
+                  {{ mapping.quality_score }}%
+                </h2>
+                <div class="progress" style="height: 30px;">
+                  <div class="progress-bar {% if mapping.quality_score >= 80 %}bg-success{% elif mapping.quality_score >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                       style="width: {{ mapping.quality_score }}%">
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <h5>État</h5>
+              <div class="text-center">
+                <span class="badge {% if mapping.status == 'active' %}badge-success{% elif mapping.status == 'draft' %}badge-warning{% else %}badge-danger{% endif %} badge-lg" style="font-size: 1.2rem; padding: 0.6rem 1rem;">
+                  {{ mapping.status|upper }}
+                </span>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <h5>Champs Mappés</h5>
+              <div class="text-center">
+                <h2 class="text-primary">{{ field_mappings|length }}</h2>
+                <small class="text-muted">sur {{ (canonical_tables|length) * 5 }} total</small>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <h5>Non Mappés</h5>
+              <div class="text-center">
+                <h2 class="text-warning">{{ unmapped_fields|length }}</h2>
+                <small class="text-muted">champs source</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="row">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header">
+          <ul class="nav nav-tabs card-header-tabs" role="tablist">
+            <li class="nav-item">
+              <a class="nav-link active" id="mappings-tab" data-toggle="tab" href="#mappings" role="tab">
+                <i class="fas fa-arrows-alt-h"></i> Mappings de Champs
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" id="unmapped-tab" data-toggle="tab" href="#unmapped" role="tab">
+                <i class="fas fa-exclamation-circle"></i> Non Mappés
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" id="anomalies-tab" data-toggle="tab" href="#anomalies" role="tab">
+                <i class="fas fa-bug"></i> Anomalies Détectées
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="tab-content">
+          <!-- Tab 1: Field Mappings -->
+          <div class="tab-pane fade show active" id="mappings" role="tabpanel">
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Table</th>
+                      <th>Champ Canonique</th>
+                      <th>Type</th>
+                      <th>Requis</th>
+                      <th>Champ Source</th>
+                      <th>Transform</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% if field_mappings %}
+                      {% for fm in field_mappings %}
+                        <tr>
+                          <td><span class="badge badge-info">{{ fm.table }}</span></td>
+                          <td><code>{{ fm.canonical_field }}</code></td>
+                          <td><small class="text-muted">{{ fm.type }}</small></td>
+                          <td>
+                            {% if fm.required %}
+                              <span class="badge badge-danger">★ Oui</span>
+                            {% else %}
+                              <span class="badge badge-success">Non</span>
+                            {% endif %}
+                          </td>
+                          <td>
+                            {% if fm.source_field %}
+                              <code>{{ fm.source_field }}</code>
+                            {% else %}
+                              <span class="text-muted">-</span>
+                            {% endif %}
+                          </td>
+                          <td>
+                            {% if fm.transform %}
+                              <small class="badge badge-secondary">{{ fm.transform }}</small>
+                            {% else %}
+                              <span class="text-muted">-</span>
+                            {% endif %}
+                          </td>
+                          <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editMapping('{{ fm.table }}', '{{ fm.canonical_field }}')">
+                              ✍️
+                            </button>
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    {% else %}
+                      <tr>
+                        <td colspan="7" class="text-center text-muted">
+                          Aucun mapping configuré pour le moment
+                        </td>
+                      </tr>
+                    {% endif %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Unmapped Fields -->
+          <div class="tab-pane fade" id="unmapped" role="tabpanel">
+            <div class="card-body">
+              {% if unmapped_fields %}
+                <div class="row">
+                  {% for uf in unmapped_fields %}
+                    <div class="col-md-6 mb-3">
+                      <div class="alert alert-warning">
+                        <strong>{{ uf.table }}</strong><br>
+                        <code>{{ uf.field }}</code>
+                        <button class="btn btn-sm btn-outline-primary float-right" onclick="mapField('{{ uf.table }}', '{{ uf.field }}')">
+                          + Mapper
+                        </button>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="alert alert-success">
+                  🎆 Tous les champs source sont mappés!
+                </div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Tab 3: Detected Anomalies -->
+          <div class="tab-pane fade" id="anomalies" role="tabpanel">
+            <div class="card-body">
+              <div id="anomaliesContent" class="text-center text-muted">
+                <p>Cliquez sur "Détecter Anomalies" dans le header pour analyser les données</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Edit Mapping -->
+<div class="modal fade" id="editMappingModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Éditer Mapping</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="editMappingBody">
+        <!-- Dynamiquement rempli -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" onclick="saveMapping()">
+          <i class="fas fa-save"></i> Enregistrer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Quality Report -->
+<div class="modal fade" id="qualityReportModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Rapport de Qualité</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="qualityReportBody">
+        <!-- Dynamiquement rempli -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .badge-lg {
+    font-size: 1rem;
+    padding: 0.5rem 0.8rem;
+  }
+
+  .table-responsive {
+    max-height: 600px;
+    overflow-y: auto;
+  }
+
+  code {
+    background-color: #f4f4f4;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+</style>
+
+<script>
+  function previewMapping() {
+    alert('🔎 Aperçu de la normalisation - Feature à implémenter');
+  }
+
+  function generateQualityReport() {
+    fetch('/mapping/api/quality-report?mapping={{ mapping_name }}')
+      .then(r => r.json())
+      .then(data => {
+        const mapping = data.mappings[0];
+        let html = `<div class="alert alert-${mapping.quality_score >= 80 ? 'success' : mapping.quality_score >= 50 ? 'warning' : 'danger'}">`;
+        html += `<h5>Score Global: ${mapping.quality_score}/100</h5></div>`;
+        html += '<div class="mt-3"><h6>Par Table:</h6>';
+
+        for (const [table, stats] of Object.entries(mapping.field_stats)) {
+          html += `
+            <div class="card mb-3">
+              <div class="card-header">
+                <strong>${table}</strong>
+                <span class="float-right badge badge-primary">${stats.mapped}/${stats.total_fields}</span>
+              </div>
+              <div class="card-body">
+                <div class="progress mb-2">
+                  <div class="progress-bar" style="width: ${stats.coverage}%">${stats.coverage}%</div>
+                </div>
+                <small>
+                  Unmapped: ${stats.unmapped} | Required missing: ${stats.required_missing}
+                </small>
+              </div>
+            </div>
+          `;
+        }
+        html += '</div>';
+        document.getElementById('qualityReportBody').innerHTML = html;
+        $('#qualityReportModal').modal('show');
+      })
+      .catch(err => {
+        document.getElementById('qualityReportBody').innerHTML = `<div class="alert alert-danger">Erreur: ${err}</div>`;
+        $('#qualityReportModal').modal('show');
+      });
+  }
+
+  function detectAnomalies() {
+    fetch('/mapping/api/anomalies?mapping={{ mapping_name }}')
+      .then(r => r.json())
+      .then(data => {
+        let html = '';
+        if (data.total === 0) {
+          html = '<div class="alert alert-success">🎆 Aucune anomalie détectée!</div>';
+        } else {
+          html = `
+            <div class="alert alert-warning">
+              <strong>⚠️ ${data.total} anomalies détectées</strong>
+              <br>Critical: <span class="badge badge-danger">${data.critical}</span>
+              High: <span class="badge badge-warning">${data.high}</span>
+              Medium: <span class="badge badge-info">${data.medium}</span>
+            </div>
+            <table class="table table-sm">
+              <thead>
+                <tr><th>Table</th><th>Row</th><th>Field</th><th>Issue</th><th>Severity</th></tr>
+              </thead>
+              <tbody>
+          `;
+
+          for (const anom of data.anomalies) {
+            const severityColor = anom.severity === 'critical' ? 'danger' : anom.severity === 'high' ? 'warning' : 'info';
+            html += `
+              <tr>
+                <td><span class="badge badge-secondary">${anom.table}</span></td>
+                <td>${anom.row}</td>
+                <td><code>${anom.field}</code></td>
+                <td>${anom.issue}</td>
+                <td><span class="badge badge-${severityColor}">${anom.severity}</span></td>
+              </tr>
+            `;
+          }
+          html += '</tbody></table>';
+        }
+
+        document.getElementById('anomaliesContent').innerHTML = html;
+        document.getElementById('anomalies-tab').click();
+      })
+      .catch(err => {
+        document.getElementById('anomaliesContent').innerHTML = `<div class="alert alert-danger">Erreur: ${err}</div>`;
+      });
+  }
+
+  function editMapping(table, field) {
+    const html = `
+      <div class="form-group">
+        <label>Champ Canonique</label>
+        <input type="text" class="form-control" value="${field}" disabled>
+      </div>
+      <div class="form-group">
+        <label>Champ Source</label>
+        <select class="form-control" id="sourceField">
+          <option value="">-- Aucun --</option>
+          <option value="client_id">client_id</option>
+          <option value="client_name">client_name</option>
+          <option value="product_id">product_id</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Transform</label>
+        <select class="form-control" id="transform">
+          <option value="">-- Aucun --</option>
+          <option value="trim">Trim</option>
+          <option value="lowercase">Minuscules</option>
+          <option value="uppercase">Majuscules</option>
+        </select>
+      </div>
+    `;
+    document.getElementById('editMappingBody').innerHTML = html;
+    $('#editMappingModal').modal('show');
+  }
+
+  function saveMapping() {
+    alert('🔄 Sauvegarde - Feature à implémenter');
+    $('#editMappingModal').modal('hide');
+  }
+
+  function mapField(table, field) {
+    alert(`🗃️ Mapper ${field} de ${table} - Feature à implémenter`);
+  }
+</script>
+{% endblock %}
