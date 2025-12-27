@@ -1,0 +1,301 @@
+{#
+  Formulaire de création mapping
+  
+  Contexte:
+    - connectors: [{name, type}]
+    - canonical_tables: ["CUSTOMERS", "PRODUCTS", ...]
+    - transforms: {key: description}
+#}
+
+{% extends "base.html" %}
+
+{% block title %}Créer un Mapping{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-10">
+      <!-- Header -->
+      <div class="mb-4">
+        <h1>🗃️ Créer un Mapping</h1>
+        <p class="text-muted">Configurez le mapping entre vos données source et le schéma canonique</p>
+      </div>
+
+      <!-- Step 1: Basic Info -->
+      <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0"><span class="badge badge-light">1</span> Informations de Base</h5>
+        </div>
+        <div class="card-body">
+          <form method="POST" action="{{ url_for('mapping.create_mapping') }}" id="mappingForm">
+            <!-- Mapping Name -->
+            <div class="form-group">
+              <label for="mapping_name"><strong>Nom du Mapping</strong></label>
+              <input 
+                type="text" 
+                class="form-control" 
+                id="mapping_name" 
+                name="mapping_name"
+                placeholder="ex: isavigne_canonical_v1"
+                required
+              >
+              <small class="form-text text-muted">
+                Identificateur unique pour ce mapping
+              </small>
+            </div>
+
+            <!-- Connector Selection -->
+            <div class="form-group">
+              <label for="connector_name"><strong>Connecteur Source</strong></label>
+              <select 
+                class="form-control" 
+                id="connector_name" 
+                name="connector_name"
+                onchange="updateSourceFields(this.value)"
+                required
+              >
+                <option value="">-- Sélectionnez un connecteur --</option>
+                {% for conn in connectors %}
+                  <option value="{{ conn.name }}">{{ conn.name }} ({{ conn.type|upper }})</option>
+                {% endfor %}
+              </select>
+              <small class="form-text text-muted">
+                Le connecteur dont vous voulez mapper les données
+              </small>
+            </div>
+
+            <!-- Info Box -->
+            <div class="alert alert-info">
+              <strong>📊 Info:</strong> Vous allez mapper les champs source de ce connecteur vers notre schéma canonique (CUSTOMERS, PRODUCTS, SALES_LINES, STOCK_LEVELS, PRODUCT_CATALOG).
+            </div>
+
+            <div class="form-group">
+              <button type="button" class="btn btn-primary" onclick="nextStep()">
+                <i class="fas fa-arrow-right"></i> Continuer au Mapping
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Step 2: Field Mapping (Initially Hidden) -->
+      <div class="card" id="mappingStep" style="display: none;">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0"><span class="badge badge-light">2</span> Mapping des Champs</h5>
+        </div>
+        <div class="card-body">
+          <!-- Tabs for each canonical table -->
+          <ul class="nav nav-tabs" role="tablist">
+            {% for table in canonical_tables %}
+              <li class="nav-item">
+                <a class="nav-link {% if loop.first %}active{% endif %}" 
+                   id="tab-{{ table }}" 
+                   data-toggle="tab" 
+                   href="#content-{{ table }}"
+                   role="tab">
+                  {{ table }}
+                  <span class="badge badge-secondary ml-2" id="count-{{ table }}">0</span>
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+
+          <div class="tab-content mt-3">
+            {% for table in canonical_tables %}
+              <div class="tab-pane fade {% if loop.first %}show active{% endif %}" 
+                   id="content-{{ table }}" 
+                   role="tabpanel">
+                <!-- Canonical fields for this table -->
+                <div id="fields-{{ table }}" class="fields-container">
+                  <!-- Dynamiquement rempli par JavaScript -->
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .fields-container {
+    max-height: 600px;
+    overflow-y: auto;
+  }
+
+  .field-mapping-row {
+    border-left: 3px solid #ccc;
+    padding: 12px;
+    margin-bottom: 12px;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+  }
+
+  .field-mapping-row.required {
+    border-left-color: #dc3545;
+    background-color: #fff5f5;
+  }
+
+  .field-mapping-row.optional {
+    border-left-color: #28a745;
+    background-color: #f5fff5;
+  }
+
+  .canonical-field {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 6px;
+  }
+
+  .field-badge {
+    font-size: 0.75rem;
+    padding: 3px 6px;
+  }
+
+  .mapping-input {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .mapping-input select,
+  .mapping-input input {
+    flex: 1;
+  }
+
+  .mapping-input button {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    font-size: 0.9rem;
+  }
+
+  .nav-tabs .nav-link {
+    color: #495057;
+    border: none;
+    border-bottom: 3px solid transparent;
+  }
+
+  .nav-tabs .nav-link.active {
+    color: #007bff;
+    background-color: transparent;
+    border-bottom-color: #007bff;
+  }
+</style>
+
+<script>
+  // Quality rules (depuis backend)
+  const qualityRules = {
+    'CUSTOMERS': {
+      'customer_id': {'required': true, 'type': 'string'},
+      'customer_name': {'required': true, 'type': 'string'},
+      'email': {'required': false, 'type': 'email'},
+      'phone': {'required': false, 'type': 'string'},
+      'address': {'required': false, 'type': 'string'},
+      'country': {'required': false, 'type': 'string'},
+      'created_at': {'required': false, 'type': 'datetime'},
+    },
+    'PRODUCTS': {
+      'product_id': {'required': true, 'type': 'string'},
+      'product_name': {'required': true, 'type': 'string'},
+      'sku': {'required': false, 'type': 'string'},
+      'price': {'required': true, 'type': 'float'},
+      'category': {'required': false, 'type': 'string'},
+      'description': {'required': false, 'type': 'string'},
+    },
+    'SALES_LINES': {
+      'sale_id': {'required': true, 'type': 'string'},
+      'customer_id': {'required': true, 'type': 'string'},
+      'product_id': {'required': true, 'type': 'string'},
+      'quantity': {'required': true, 'type': 'float'},
+      'unit_price': {'required': true, 'type': 'float'},
+      'total_amount': {'required': true, 'type': 'float'},
+      'sale_date': {'required': true, 'type': 'datetime'},
+    },
+    'STOCK_LEVELS': {
+      'product_id': {'required': true, 'type': 'string'},
+      'warehouse_id': {'required': false, 'type': 'string'},
+      'quantity_on_hand': {'required': true, 'type': 'float'},
+      'last_updated': {'required': false, 'type': 'datetime'},
+    },
+    'PRODUCT_CATALOG': {
+      'product_id': {'required': true, 'type': 'string'},
+      'product_name': {'required': true, 'type': 'string'},
+      'sku': {'required': false, 'type': 'string'},
+      'price': {'required': true, 'type': 'float'},
+    }
+  };
+
+  const transforms = {{ transforms | tojson }};
+
+  function updateSourceFields(connectorName) {
+    // En prod, récupérer champs source réels du connecteur
+    // Pour démo, utiliser champs mock
+    const mockSourceFields = {
+      'isavigne_prod': ['client_id', 'client_name', 'client_email', 'client_phone', 'product_id', 'product_name', 'price'],
+      'odoo_prod': ['id', 'name', 'email', 'phone', 'product_id', 'product_name', 'list_price'],
+    };
+
+    const sourceFields = mockSourceFields[connectorName] || [];
+    console.log('Source fields:', sourceFields);
+  }
+
+  function nextStep() {
+    const mappingName = document.getElementById('mapping_name').value;
+    const connectorName = document.getElementById('connector_name').value;
+
+    if (!mappingName || !connectorName) {
+      alert('Veuillez remplir tous les champs requis');
+      return;
+    }
+
+    // Afficher step 2
+    document.getElementById('mappingStep').style.display = 'block';
+
+    // Remplir les champs
+    for (const [table, fields] of Object.entries(qualityRules)) {
+      const container = document.getElementById(`fields-${table}`);
+      let html = '';
+
+      for (const [canonicalField, rule] of Object.entries(fields)) {
+        const isRequired = rule.required;
+        const rowClass = isRequired ? 'required' : 'optional';
+        const badgeClass = isRequired ? 'badge-danger' : 'badge-success';
+        const badgeText = isRequired ? 'Requis' : 'Optionnel';
+
+        html += `
+          <div class="field-mapping-row ${rowClass}">
+            <div class="canonical-field">
+              ${canonicalField}
+              <span class="badge ${badgeClass} field-badge">${badgeText}</span>
+            </div>
+            <div class="mapping-input">
+              <select class="form-control form-control-sm" id="source-${table}-${canonicalField}">
+                <option value="">-- Aucun --</option>
+                <option value="client_id">client_id</option>
+                <option value="client_name">client_name</option>
+                <option value="client_email">client_email</option>
+                <option value="product_id">product_id</option>
+                <option value="product_name">product_name</option>
+                <option value="price">price</option>
+              </select>
+              <select class="form-control form-control-sm" id="transform-${table}-${canonicalField}">
+                <option value="">-- Pas de transform --</option>
+                <option value="trim">Trim</option>
+                <option value="lowercase">Minuscules</option>
+                <option value="uppercase">Majuscules</option>
+              </select>
+            </div>
+          </div>
+        `;
+      }
+
+      container.innerHTML = html;
+      document.getElementById(`count-${table}`).textContent = Object.keys(fields).length;
+    }
+
+    // Scroll to step 2
+    document.getElementById('mappingStep').scrollIntoView({ behavior: 'smooth' });
+  }
+</script>
+{% endblock %}
