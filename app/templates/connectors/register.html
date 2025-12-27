@@ -1,0 +1,250 @@
+{#
+  Formulaire d'enregistrement de connecteur
+  
+  Contexte:
+    - connector_types: ["isavigne", "odoo"]
+#}
+
+{% extends "base.html" %}
+
+{% block title %}Enregistrer un Connecteur{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <!-- Header -->
+      <div class="mb-4">
+        <h1>📚 Ajouter un Connecteur</h1>
+        <p class="text-muted">Enregistrez une nouvelle source de données</p>
+      </div>
+
+      <!-- Form -->
+      <form method="POST" action="{{ url_for('connectors.register_connector') }}" class="needs-validation">
+        <!-- Connector Name -->
+        <div class="form-group">
+          <label for="connector_name"><strong>Nom du connecteur</strong></label>
+          <input 
+            type="text" 
+            class="form-control" 
+            id="connector_name" 
+            name="connector_name"
+            placeholder="ex: isavigne_prod, odoo_prod"
+            required
+          >
+          <small class="form-text text-muted">
+            Identificateur unique pour ce connecteur
+          </small>
+        </div>
+
+        <!-- Connector Type -->
+        <div class="form-group">
+          <label for="connector_type"><strong>Type de connecteur</strong></label>
+          <select 
+            class="form-control" 
+            id="connector_type" 
+            name="connector_type"
+            required
+            onchange="updateFormFields(this.value)"
+          >
+            <option value="">-- Sélectionnez un type --</option>
+            {% for type in connector_types %}
+              <option value="{{ type }}">{{ type|upper }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- iSaVigne Config (hidden by default) -->
+        <div id="isavigne-config" style="display: none;" class="border-left border-warning pl-3 mb-4">
+          <h4 class="mb-3"><i class="fab fa-file-csv text-warning"></i> Configuration iSaVigne</h4>
+          
+          <div class="form-group">
+            <label for="isavigne_export_path"><strong>Chemin d'export</strong></label>
+            <input 
+              type="text" 
+              class="form-control" 
+              id="isavigne_export_path" 
+              name="isavigne_export_path"
+              placeholder="ex: /mnt/shared/isavigne_exports"
+            >
+            <small class="form-text text-muted">
+              Chemin absolu du dossier contenant les exports CSV/Excel
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="isavigne_file_pattern"><strong>Pattern de fichiers</strong></label>
+            <input 
+              type="text" 
+              class="form-control" 
+              id="isavigne_file_pattern" 
+              name="isavigne_file_pattern"
+              value="*.csv"
+              placeholder="ex: *.csv, *.xlsx"
+            >
+            <small class="form-text text-muted">
+              Pattern glob pour les fichiers (default: *.csv)
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="encoding"><strong>Encodage</strong></label>
+            <select class="form-control" id="encoding" name="encoding">
+              <option value="utf-8" selected>UTF-8</option>
+              <option value="latin-1">Latin-1</option>
+              <option value="iso-8859-1">ISO-8859-1</option>
+              <option value="cp1252">Windows-1252</option>
+            </select>
+            <small class="form-text text-muted">
+              Encodage des fichiers CSV
+            </small>
+          </div>
+
+          <div class="alert alert-info">
+            <strong>📄 Fichiers attendus:</strong>
+            <ul class="mb-0 mt-2">
+              <li><code>*client*.csv</code> → CUSTOMERS</li>
+              <li><code>*produit*.csv</code> → PRODUCT_CATALOG</li>
+              <li><code>*vente*.csv</code> → SALES_LINES</li>
+              <li><code>*stock*.csv</code> → STOCK_LEVELS</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Odoo Config (hidden by default) -->
+        <div id="odoo-config" style="display: none;" class="border-left border-primary pl-3 mb-4">
+          <h4 class="mb-3"><i class="fas fa-cube text-primary"></i> Configuration Odoo</h4>
+          
+          <div class="form-group">
+            <label for="odoo_url"><strong>URL Odoo</strong></label>
+            <input 
+              type="url" 
+              class="form-control" 
+              id="odoo_url" 
+              name="odoo_url"
+              placeholder="https://odoo.example.com"
+            >
+            <small class="form-text text-muted">
+              URL complète du serveur Odoo (avec HTTPS)
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="odoo_db"><strong>Base de données</strong></label>
+            <input 
+              type="text" 
+              class="form-control" 
+              id="odoo_db" 
+              name="odoo_db"
+              placeholder="prod_db"
+            >
+            <small class="form-text text-muted">
+              Nom de la base de données Odoo
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="odoo_user"><strong>Utilisateur</strong></label>
+            <input 
+              type="text" 
+              class="form-control" 
+              id="odoo_user" 
+              name="odoo_user"
+              placeholder="crm_sync_bot"
+            >
+            <small class="form-text text-muted">
+              Utilisateur technique dédié (recommandé)
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="odoo_api_key"><strong>API Key</strong></label>
+            <input 
+              type="password" 
+              class="form-control" 
+              id="odoo_api_key" 
+              name="odoo_api_key"
+              placeholder="xxxxxxxxxxxx"
+            >
+            <small class="form-text text-muted">
+              API Key générée dans Odoo (Préférences → Sécurité)
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="odoo_company_id"><strong>ID Société (optionnel)</strong></label>
+            <input 
+              type="number" 
+              class="form-control" 
+              id="odoo_company_id" 
+              name="odoo_company_id"
+              placeholder="1"
+            >
+            <small class="form-text text-muted">
+              Si multi-company. Default: 1
+            </small>
+          </div>
+
+          <div class="alert alert-info">
+            <strong>🛠 Setup requis:</strong>
+            <ol class="mb-0 mt-2">
+              <li>Créer utilisateur technique dans Odoo</li>
+              <li>Générer API Key dans Préférences</li>
+              <li>Attribuer droits (read sur Sales, Inventory)</li>
+              <li>Vérifier HTTPS + firewall</li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="form-group mt-4">
+          <button type="submit" class="btn btn-primary btn-lg">
+            <i class="fas fa-save"></i> Enregistrer
+          </button>
+          <a href="{{ url_for('connectors.list_connectors') }}" class="btn btn-secondary btn-lg ml-2">
+            <i class="fas fa-times"></i> Annuler
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<style>
+  .form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  }
+
+  .alert {
+    border-radius: 0.5rem;
+  }
+
+  .border-left {
+    border-left: 4px solid;
+  }
+
+  .border-warning {
+    border-left-color: #ffc107;
+  }
+
+  .border-primary {
+    border-left-color: #007bff;
+  }
+</style>
+
+<script>
+  function updateFormFields(connectorType) {
+    // Hide all configs
+    document.getElementById('isavigne-config').style.display = 'none';
+    document.getElementById('odoo-config').style.display = 'none';
+
+    // Show selected config
+    if (connectorType === 'isavigne') {
+      document.getElementById('isavigne-config').style.display = 'block';
+    } else if (connectorType === 'odoo') {
+      document.getElementById('odoo-config').style.display = 'block';
+    }
+  }
+</script>
+{% endblock %}
