@@ -1,0 +1,351 @@
+{# 
+  Liste des Connecteurs
+  
+  Contexte:
+    - connectors: {name: {type, status, last_sync, ...}}
+    - status: {registered, healthy, error, total_syncs, ...}
+    - metrics: {total_records, records_by_table, ...}
+    - recent_syncs: [{timestamp, success, records, ...}]
+#}
+
+{% extends "base.html" %}
+
+{% block title %}Sources de Données{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-md-8">
+      <h1>🖱 Sources de Données</h1>
+      <p class="text-muted">Gérez vos connecteurs (iSaVigne, Odoo, etc.)</p>
+    </div>
+    <div class="col-md-4 text-right">
+      <a href="{{ url_for('connectors.register_connector') }}" class="btn btn-primary btn-lg">
+        <i class="fas fa-plus"></i> Ajouter Connecteur
+      </a>
+    </div>
+  </div>
+
+  <!-- Status Cards -->
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Connecteurs</h5>
+          <h2 class="text-primary">{{ status.connectors_registered }}</h2>
+          <small class="text-muted">Enregistrés</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Status</h5>
+          <h2 class="text-success">{{ status.connectors_by_status.get('healthy', 0) }}</h2>
+          <small class="text-muted">Sains</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Syncs</h5>
+          <h2 class="text-info">{{ status.total_syncs }}</h2>
+          <small class="text-muted">Au total</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Records</h5>
+          <h2 class="text-warning">{{ metrics.total_records_synced }}</h2>
+          <small class="text-muted">Synchronisés</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connecteurs -->
+  <div class="row">
+    {% if connectors %}
+      {% for name, conn_status in connectors.items() %}
+        <div class="col-md-6 mb-4">
+          <div class="card h-100 shadow-sm">
+            <!-- Header -->
+            <div class="card-header {% if conn_status.status == 'healthy' %}bg-success{% else %}bg-danger{% endif %} text-white">
+              <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ name }}</h5>
+                <span class="badge badge-light">{{ conn_status.connector_type }}</span>
+              </div>
+            </div>
+
+            <!-- Body -->
+            <div class="card-body">
+              <!-- Status -->
+              <div class="mb-3">
+                <strong>Status:</strong>
+                <span class="badge {% if conn_status.status == 'healthy' %}badge-success{% elif conn_status.status == 'error' %}badge-danger{% else %}badge-warning{% endif %}">
+                  {% if conn_status.status == 'healthy' %}
+                    ✓ Sain
+                  {% elif conn_status.status == 'error' %}
+                    ✗ Erreur
+                  {% elif conn_status.status == 'syncing' %}
+                    🔄 Syncing...
+                  {% else %}
+                    ⏸ Inactif
+                  {% endif %}
+                </span>
+              </div>
+
+              <!-- Last Sync -->
+              <div class="mb-3">
+                <strong>Dernière sync:</strong>
+                {% if conn_status.last_sync %}
+                  <br><small class="text-muted">{{ conn_status.last_sync }}</small>
+                {% else %}
+                  <span class="text-muted">Jamais</span>
+                {% endif %}
+              </div>
+
+              <!-- Error Message -->
+              {% if conn_status.last_error %}
+                <div class="alert alert-danger alert-sm mb-3" role="alert">
+                  <small><strong>⚠️ Erreur:</strong> {{ conn_status.last_error }}</small>
+                </div>
+              {% endif %}
+            </div>
+
+            <!-- Footer avec boutons -->
+            <div class="card-footer bg-light">
+              <div class="btn-group btn-group-sm w-100" role="group">
+                <!-- Test Connection Button -->
+                <button 
+                  type="button" 
+                  class="btn btn-outline-info test-connector-btn" 
+                  data-connector="{{ name }}"
+                  title="Tester la connexion"
+                >
+                  <i class="fas fa-check-circle"></i> Test
+                </button>
+
+                <!-- Sync Button -->
+                <button 
+                  type="button" 
+                  class="btn btn-outline-primary sync-connector-btn" 
+                  data-connector="{{ name }}"
+                  title="Lancer synchronisation"
+                >
+                  <i class="fas fa-sync-alt"></i> Sync
+                </button>
+
+                <!-- Details Button -->
+                <a 
+                  href="{{ url_for('connectors.view_connector', name=name) }}" 
+                  class="btn btn-outline-secondary"
+                  title="Voir détails"
+                >
+                  <i class="fas fa-eye"></i> Détails
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="col-12">
+        <div class="alert alert-info" role="alert">
+          <h5>🔍 Aucun connecteur enregistré</h5>
+          <p>Cliquez sur "Ajouter Connecteur" pour commencer.</p>
+          <a href="{{ url_for('connectors.register_connector') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Ajouter Connecteur
+          </a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Recent Syncs Table -->
+  {% if recent_syncs %}
+    <div class="row mt-5">
+      <div class="col-12">
+        <h3>📈 Dernières Syncs</h3>
+        <div class="table-responsive">
+          <table class="table table-hover table-sm">
+            <thead class="table-light">
+              <tr>
+                <th>Date</th>
+                <th>Connecteur</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Records</th>
+                <th>Durée (s)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for sync in recent_syncs %}
+                <tr class="{% if sync.success %}table-success{% else %}table-danger{% endif %}">
+                  <td><small>{{ sync.timestamp }}</small></td>
+                  <td><strong>{{ sync.connector_name }}</strong></td>
+                  <td><span class="badge badge-secondary">{{ sync.connector_type }}</span></td>
+                  <td>
+                    {% if sync.success %}
+                      <span class="badge badge-success">✓ OK</span>
+                    {% else %}
+                      <span class="badge badge-danger">✗ ERREUR</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if sync.records_processed %}
+                      {{ sync.records_processed.values()|list|sum }}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td>{{ sync.duration_seconds|round(2) }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Modal: Test Result -->
+<div class="modal fade" id="testResultModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Résultat Test</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="testResultBody">
+        <!-- Dynamiquement rempli -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Sync Result -->
+<div class="modal fade" id="syncResultModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Résultat Sync</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="syncResultBody">
+        <!-- Dynamiquement rempli -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .btn-group-sm .btn {
+    font-size: 0.85rem;
+    padding: 0.35rem 0.6rem;
+  }
+
+  .card {
+    border-left: 4px solid #007bff;
+  }
+
+  .card-header {
+    font-weight: bold;
+  }
+
+  .alert-sm {
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+  }
+</style>
+
+<script>
+  // Test Connector
+  document.querySelectorAll('.test-connector-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const connectorName = this.dataset.connector;
+      
+      fetch(`/connectors/${connectorName}/test`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          const result = `
+            <div class="alert alert-${data.success ? 'success' : 'danger'}">
+              <strong>${data.success ? '✓ Succès' : '✗ Échec'}</strong><br>
+              ${data.message}
+            </div>
+            <p><strong>Status:</strong> <span class="badge">${data.status}</span></p>
+          `;
+          document.getElementById('testResultBody').innerHTML = result;
+          $('#testResultModal').modal('show');
+        })
+        .catch(err => {
+          document.getElementById('testResultBody').innerHTML = `<div class="alert alert-danger">Erreur: ${err}</div>`;
+          $('#testResultModal').modal('show');
+        });
+    });
+  });
+
+  // Sync Connector
+  document.querySelectorAll('.sync-connector-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const connectorName = this.dataset.connector;
+      const btn = this;
+      
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+      
+      fetch(`/connectors/${connectorName}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+        .then(r => r.json())
+        .then(data => {
+          const recordsHtml = Object.entries(data.records_processed || {})
+            .map(([k, v]) => `<li>${k}: ${v}</li>`)
+            .join('');
+          
+          const result = `
+            <div class="alert alert-${data.success ? 'success' : 'danger'}">
+              <strong>${data.success ? '✓ Succès' : '✗ Échec'}</strong>
+            </div>
+            <p><strong>Records traffés:</strong></p>
+            <ul>${recordsHtml || '<li>Aucun</li>'}</ul>
+            <p><strong>Durée:</strong> ${data.duration_seconds}s</p>
+            ${data.errors.length ? `<p><strong>Erreurs:</strong><br>${data.errors.join('<br>')}</p>` : ''}
+          `;
+          document.getElementById('syncResultBody').innerHTML = result;
+          $('#syncResultModal').modal('show');
+        })
+        .catch(err => {
+          document.getElementById('syncResultBody').innerHTML = `<div class="alert alert-danger">Erreur: ${err}</div>`;
+          $('#syncResultModal').modal('show');
+        })
+        .finally(() => {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-sync-alt"></i> Sync';
+          // Refresh page after 2s
+          setTimeout(() => location.reload(), 2000);
+        });
+    });
+  });
+</script>
+{% endblock %}
